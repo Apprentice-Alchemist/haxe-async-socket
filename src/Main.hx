@@ -1,23 +1,19 @@
-import Server.Response;
-import Server.Request;
-import eval.luv.Loop;
-import eval.luv.Buffer;
-import eval.luv.Stream;
-import eval.luv.SockAddr;
+import http.Response;
+import http.Request;
+
 import haxe.io.Bytes;
 import sys.net.Host;
 import sys.thread.Thread;
 
 function main() {
-	var a = new Socket(null,true);
+	var a = new AsyncSocket(null, false);
 	final host = new sys.net.Host("127.0.0.1");
-	final port = 8080;
+	final port = 5500;
 	trace(host + ":" + port);
-	a.bind(new sys.net.Host("127.0.0.1"), 8080);
-	a.listen(100, () -> {
-		final s = a.accept();
+	a.bind(host, port);
+	a.listen(100, (s) -> {
+		trace(s);
 		s.readStart(b -> {
-			trace(b.toString());
 			var r = Request.fromBytes(b);
 			final r:Response = if (r.path == "/") {
 				code: 200,
@@ -30,14 +26,12 @@ function main() {
 				content: null,
 				code: 404
 			};
-			// trace(r.toBytes().toString());
-			// trace("HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=UTF-8\r\nConnection: close\r\n\r\n" + Date.now()
-			// 	.toString() + "\r\n");
+
 			s.write(r.toBytes(), success -> {
-				// trace("success : " + success);
 				s.close();
 			});
 		});
 	});
 	Thread.current().events.repeat(() -> {}, 50);
+	// Sys.command('start $host:$port');
 }

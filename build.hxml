@@ -1,3 +1,4 @@
 -cp src
 -m Main
---interp
+-hl out.hl
+-cmd hl out.hl
