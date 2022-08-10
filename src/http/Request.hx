@@ -16,7 +16,8 @@ class Request {
 
 	public static function fromBytes(b:Bytes):Request {
 		var i = new BytesInput(b);
-		var f = i.readLine().split(" ");
+		var f = i.readLine();
+		var f = f.split(" ");
 		var method = f[0];
 		var path = f[1];
 		var httpVersion = f[2];

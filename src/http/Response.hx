@@ -1,6 +1,7 @@
 package http;
 
 import haxe.io.Bytes;
+import haxe.io.BytesOutput;
 
 @:structInit
 class Response {
