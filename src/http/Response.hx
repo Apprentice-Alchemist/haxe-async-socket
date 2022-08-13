@@ -20,9 +20,9 @@ class Response {
 		out.writeString("\r\n");
 		if (content != null) {
 			out.write(content);
+		} else {
 			out.writeString("\r\n");
 		}
-		out.writeString("\r\n");
 		return out.getBytes();
 	}
 }

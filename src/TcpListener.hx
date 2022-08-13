@@ -1,3 +1,7 @@
+import haxe.io.Error;
+// import Sys.SysError;
+import haxe.io.BytesBuffer;
+import haxe.io.Bytes;
 import sys.thread.Mutex;
 import sys.thread.EventLoop;
 import haxe.io.Eof;
@@ -12,18 +16,20 @@ private class Worker {
 	public final mutex = new Mutex();
 	public final thread:Thread;
 
+	final buf = haxe.io.Bytes.alloc(1 << 14);
+
 	public function new() {
 		thread = Thread.create(() -> {
 			while (true) {
 				mutex.acquire();
-				thread_func(streams);
+				thread_func(buf, streams);
 				mutex.release();
 				Sys.sleep(0.001);
 			}
 		});
 	}
 
-	private static function thread_func(streams:Array<TcpStream>) {
+	private static function thread_func(buf:Bytes, streams:Array<TcpStream>) {
 		try {
 			if (streams.length == 0) {
 				return;
@@ -41,16 +47,18 @@ private class Worker {
 					writeSockets.push(stream.socket);
 			}
 
-			final buf = haxe.io.Bytes.alloc(1024);
-			final result = sys.net.Socket.select(readSockets, writeSockets, otherSockets, 0.0001);
+			final result = sys.net.Socket.select(readSockets, writeSockets, otherSockets, 0.001);
 			for (socket in result.read) {
 				final s:TcpStream = socket.custom;
-				final bbuf = new haxe.io.BytesBuffer();
+				if (s.readBuf == null) {
+					s.readBuf = new BytesBuffer();
+				}
+				var bytes = null;
 				try {
 					while (true) {
 						final l = socket.input.readBytes(buf, 0, buf.length);
 						if (l > 0) {
-							bbuf.addBytes(buf, 0, l);
+							s.readBuf.addBytes(buf, 0, l);
 							if (l < buf.length)
 								break;
 						} else {
@@ -58,25 +66,33 @@ private class Worker {
 						}
 					}
 
-					var bytes = bbuf.getBytes();
-					TcpListener.runMain(() -> if (s.onReadCallback != null) s.onReadCallback(bytes));
+					bytes = s.readBuf.getBytes();
+					s.readBuf = null;
 				} catch (e:Eof) {
-					if (bbuf.length > 0) {
-						trace(bbuf.getBytes().toString());
+					if (s.readBuf.length > 0) {
+						bytes = s.readBuf.getBytes();
+						s.readBuf = null;
 					}
 					break;
+				} catch (e:Error) {
+					if (e == Blocked) {
+						continue;
+					}
+					throw e;
 				}
+				if (bytes != null)
+					TcpListener.runMain(() -> if (s.onReadCallback != null) s.onReadCallback(bytes));
 			}
 			for (socket in result.write) {
 				final s:TcpStream = socket.custom;
 				for (write in s.writes) {
+					var success = false;
+					var cb = write.cb;
 					try {
 						final l = socket.output.writeBytes(write.bytes, 0, write.bytes.length);
-						var success = true;
-						var cb = write.cb;
-
-						TcpListener.runMain(() -> cb(success));
+						success = l == write.bytes.length;
 					} catch (e:Eof) {}
+					TcpListener.runMain(() -> cb(success));
 				}
 			}
 		} catch (e) {
@@ -94,12 +110,12 @@ class TcpListener {
 
 	@:allow(TcpStream)
 	static function addStream(s:TcpStream) {
-		var index = i++ % workers.length;
-		var worker = workers[index];
+		i = i++ % workers.length;
+		var worker = workers[i];
 		worker.mutex.acquire();
 		worker.streams.push(s);
 		worker.mutex.release();
-		return index;
+		return i;
 	}
 
 	@:allow(TcpStream)
@@ -128,14 +144,16 @@ class TcpListener {
 		this.callback = cb;
 		this.smutex = new Mutex();
 		this.sthread = Thread.createWithEventLoop(() -> {
-			this.handler = sthread.events.repeat(() -> {
-				smutex.acquire();
-				var a = socket.accept();
-				mainThread.events.run(() -> {
-					cb(new TcpStream(a));
-				});
-				smutex.release();
-			}, 0);
+			Thread.runWithEventLoop(() -> {
+				this.handler = sthread.events.repeat(() -> try {
+					smutex.acquire();
+					var a = socket.accept();
+					mainThread.events.run(() -> {
+						cb(new TcpStream(a));
+					});
+					smutex.release();
+				} catch (e) trace(e.details()), 0);
+			});
 		});
 		this.keepAlive = mainThread.events.repeat(() -> {}, 1000);
 	}

@@ -1,5 +1,6 @@
 package;
 
+import haxe.io.BytesBuffer;
 import sys.thread.Mutex;
 import haxe.io.Bytes;
 import sys.net.Socket;
@@ -8,7 +9,7 @@ import sys.net.Host;
 class TcpStream {
 	public static function connect(host:Host, port:Int):TcpStream {
 		var sock = new sys.net.Socket();
-		sock.setBlocking(false);
+		// sock.setBlocking(false);
 		sock.connect(host, port);
 		return new TcpStream(sock);
 	}
@@ -17,6 +18,7 @@ class TcpStream {
 	final writes:Array<{bytes:Bytes, cb:Bool->Void}> = [];
 	final streamIndex:Int;
 	private var onReadCallback:Null<Bytes->Void>;
+	private var readBuf:haxe.io.BytesBuffer;
 	final mutex:Mutex;
 
 	function new(sock:sys.net.Socket) {
@@ -46,6 +48,6 @@ class TcpStream {
 
 	public function close() {
 		TcpListener.removeStream(this);
-		socket.close();
+		try socket.close() catch(e) trace(e.details());
 	}
 }

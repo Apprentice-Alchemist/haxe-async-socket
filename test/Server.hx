@@ -5,7 +5,7 @@ import http.Response;
 import http.Request;
 
 final host = new sys.net.Host("127.0.0.1");
-final port = 6400;
+final port = 6600;
 
 function main() {
 	trace(host + ":" + port);
@@ -25,9 +25,9 @@ function main() {
 			};
 
 			s.write(r.toBytes(), success -> {
-				if(!success) {
-					trace("Unsuccessfull write");
-				}
+				// if(!success) {
+					trace("write");
+				// }
 				s.readStop();
 				s.close();
 			});
