@@ -1,3 +1,4 @@
+import hl.Profile;
 import haxe.io.BytesInput;
 import http.Response;
 import http.Request;
@@ -7,7 +8,7 @@ import sys.thread.Thread;
 
 function main() {
 	final host = new sys.net.Host("127.0.0.1");
-	final port = 6661;
+	final port = 6500;
 	trace(host + ":" + port);
 	TcpListener.listen(host, port, (s) -> try {
 		s.readStart(b -> {

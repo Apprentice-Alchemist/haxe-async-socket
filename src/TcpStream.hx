@@ -36,6 +36,7 @@ private enum abstract SocketFlags(Int) from Int to Int {
 class TcpStream {
 	public static function connect(host:Host, port:Int):TcpStream {
 		var sock = new sys.net.Socket();
+		sock.setBlocking(false);
 		sock.connect(host, port);
 		return new TcpStream(sock);
 	}
@@ -56,13 +57,11 @@ class TcpStream {
 	public function readStart(cb:Bytes->Void):Void {
 		TcpListener.mutex.acquire();
 		onReadCallback = cb;
-		flags.add(READING);
 		TcpListener.mutex.release();
 	}
 
 	public function readStop():Void {
 		TcpListener.mutex.acquire();
-		flags.remove(READING);
 		onReadCallback = null;
 		TcpListener.mutex.release();
 	}

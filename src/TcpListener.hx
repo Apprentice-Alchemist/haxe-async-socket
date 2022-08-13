@@ -1,3 +1,4 @@
+import sys.thread.Mutex;
 import sys.thread.EventLoop;
 import haxe.io.Eof;
 import sys.net.Socket;
@@ -14,11 +15,16 @@ class TcpListener {
 
 	private static function __init__() {
 		mainThread = Thread.current();
-		thread = Thread.createWithEventLoop(() -> Thread.current().events.repeat(thread_func, 50));
+		thread = Thread.createWithEventLoop(() -> Thread.current().events.repeat(thread_func, 0));
 	}
 
 	private static function thread_func() {
-		if (mutex.tryAcquire()) {
+		mutex.acquire();
+		try {
+			if(streams.length == 0) {
+				mutex.release();
+				return;
+			}
 			var readSockets = [];
 			var writeSockets = [];
 			var otherSockets = [];
@@ -30,7 +36,7 @@ class TcpListener {
 					stream.socket.close();
 					streams[i] = null;
 				} else {
-					if (stream.flags.has(READING))
+					if (stream.onReadCallback != null)
 						readSockets.push(stream.socket);
 					if (stream.writes.length > 0)
 						writeSockets.push(stream.socket);
@@ -38,11 +44,11 @@ class TcpListener {
 			}
 
 			final buf = haxe.io.Bytes.alloc(1024);
-			final result = sys.net.Socket.select(readSockets, writeSockets, otherSockets, 0.1);
+			final result = sys.net.Socket.select(readSockets, writeSockets, otherSockets, 0.01);
 			for (socket in result.read) {
 				final s:TcpStream = socket.custom;
+				final bbuf = new haxe.io.BytesBuffer();
 				try {
-					final bbuf = new haxe.io.BytesBuffer();
 					while (true) {
 						final l = socket.input.readBytes(buf, 0, buf.length);
 						if (l > 0) {
@@ -53,10 +59,11 @@ class TcpListener {
 							break;
 						}
 					}
-					if (s.onReadCallback != null && s.flags.has(READING)) {
+					if (s.onReadCallback != null) {
 						runMain(() -> s.onReadCallback(bbuf.getBytes()));
 					}
 				} catch (e:Eof) {
+					trace(bbuf.getBytes().toString());
 					break;
 				}
 			}
@@ -69,8 +76,11 @@ class TcpListener {
 					} catch (e:Eof) {}
 				}
 			}
-			mutex.release();
+		} catch (e) {
+			trace(e.details());
 		}
+
+		mutex.release();
 	}
 
 	private static function runMain(f:Void->Void):Void {
@@ -80,6 +90,7 @@ class TcpListener {
 	var socket:sys.net.Socket;
 	final callback:TcpStream->Void;
 	final sthread:Thread;
+	final smutex:Mutex;
 	var handler:EventHandler;
 
 	function new(socket:sys.net.Socket, cb:TcpStream->Void):Void {
@@ -87,17 +98,16 @@ class TcpListener {
 		this.socket = socket;
 		this.socket.custom = this;
 		this.callback = cb;
+		this.smutex = new Mutex();
 		this.sthread = Thread.createWithEventLoop(() -> {
 			this.handler = sthread.events.repeat(() -> {
-				if (Thread.readMessage(false) != null) {
-					socket.close();
-					this.sthread.events.cancel(handler);
-				}
+				smutex.acquire();
 				var a = socket.accept();
 				var stream = new TcpStream(a);
 				mainThread.events.run(() -> {
 					cb(stream);
 				});
+				smutex.release();
 			}, 10);
 		});
 	}
@@ -110,6 +120,8 @@ class TcpListener {
 	}
 
 	public function close():Void {
-		this.sthread.sendMessage(true);
+		this.smutex.acquire();
+		this.sthread.events.cancel(this.handler);
+		this.smutex.release();
 	}
 }
