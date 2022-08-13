@@ -1,14 +1,13 @@
-import hl.Profile;
-import haxe.io.BytesInput;
+package test;
+
+import haxe.io.Bytes;
 import http.Response;
 import http.Request;
-import haxe.io.Bytes;
-import sys.net.Host;
-import sys.thread.Thread;
+
+final host = new sys.net.Host("127.0.0.1");
+final port = 6400;
 
 function main() {
-	final host = new sys.net.Host("127.0.0.1");
-	final port = 6500;
 	trace(host + ":" + port);
 	TcpListener.listen(host, port, (s) -> try {
 		s.readStart(b -> {
@@ -26,11 +25,12 @@ function main() {
 			};
 
 			s.write(r.toBytes(), success -> {
+				if(!success) {
+					trace("Unsuccessfull write");
+				}
 				s.readStop();
 				s.close();
 			});
 		});
-	} catch(e) trace(e.details()));
-	Thread.current().events.repeat(() -> {}, 50);
-	// Sys.command('start $host:$port');
+	} catch (e) trace(e.details()));
 }

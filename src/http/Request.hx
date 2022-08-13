@@ -1,5 +1,6 @@
 package http;
 
+import haxe.io.BytesOutput;
 import haxe.io.Eof;
 import haxe.http.HttpMethod;
 import haxe.io.BytesInput;
@@ -13,6 +14,19 @@ class Request {
 	public final headers:Map<String, String>;
 
 	public final content:Null<Bytes>;
+
+	public function toBytes():Bytes {
+		var o = new BytesOutput();
+		o.writeString('$method $path HTTP/$httpVersion\r\n');
+		for(key => value in headers) {
+			o.writeString('$key: $value\r\n');
+		}
+		o.writeString('\r\n');
+		if(content != null) {
+			o.writeBytes(content, 0, content.length);
+		}
+		return o.getBytes();
+	}
 
 	public static function fromBytes(b:Bytes):Request {
 		var i = new BytesInput(b);
